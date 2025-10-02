@@ -1,0 +1,9 @@
+# Docker volumes
+loki_data/
+grafana_data/
+tmp/
+*.log
+
+# OS/editor junk
+.DS_Store
+.vscode/

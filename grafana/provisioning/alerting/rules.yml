@@ -1,0 +1,155 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: LogBox Alerts
+    folder: LogBox
+    interval: 1m
+
+    rules:
+      # ==========================================================
+      # Alert 1: Failed login burst (>=10 in 5m)
+      # ==========================================================
+      - uid: failed-logins-5m
+        title: Failed login burst (>=10 in 5m)
+        condition: C
+        for: 2m
+        annotations:
+          summary: "Many failed logins detected in the last 5 minutes."
+        labels:
+          severity: high
+          product: logbox
+        data:
+          # A1: Linux/SSH failures (non-empty label matcher + regex alternation)
+          - refId: A1
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 300   # 5m
+              to: 0
+            model:
+              refId: A1
+              editorMode: code
+              queryType: range
+              queryLanguage: logql
+              expr: >
+                sum(
+                  count_over_time(
+                    {job=~".+"} |~ "Failed password|Invalid user" [5m]
+                  )
+                )
+
+          # A2: Windows Security (JSON winlog; EventID=4625)
+          - refId: A2
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              refId: A2
+              editorMode: code
+              queryType: range
+              queryLanguage: logql
+              expr: >
+                sum(
+                  count_over_time(
+                    {job="winlog"} | json | EventID=4625 [5m]
+                  )
+                )
+
+          # A: Combine A1 + A2  (note the $-prefixed refs)
+          - refId: A
+            datasourceUid: __expr__
+            model:
+              refId: A
+              type: math
+              expression: $A1 + $A2
+
+          # B: Reduce to a single number (last), replace null with 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              refId: B
+              type: reduce
+              expression: A
+              reducer: last
+              settings:
+                mode: replaceNN
+                replaceWithValue: 0
+
+          # C: Threshold > 10
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+                  query:
+                    params: [B]
+
+      # ==========================================================
+      # Alert 2: Application error spike (>=50 in 1m, per service)
+      # ==========================================================
+      - uid: app-errors-1m
+        title: Application error spike (>=50 in 1m)
+        condition: F
+        for: 1m
+        annotations:
+          summary: "High volume of application errors in the last minute."
+        labels:
+          severity: medium
+          product: logbox
+        data:
+          # D: Count errors in last 1 minute, grouped by svc
+          - refId: D
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 60    # 1m
+              to: 0
+            model:
+              refId: D
+              editorMode: code
+              queryType: range
+              queryLanguage: logql
+              expr: >
+                sum by (svc)(
+                  count_over_time(
+                    {job="app"} |= "ERROR" [1m]
+                  )
+                )
+
+          # E: Reduce each series to last value; replace nulls with 0
+          - refId: E
+            datasourceUid: __expr__
+            model:
+              refId: E
+              type: reduce
+              expression: D
+              reducer: last
+              settings:
+                mode: replaceNN
+                replaceWithValue: 0
+
+          # F: Threshold per service > 50
+          - refId: F
+            datasourceUid: __expr__
+            model:
+              refId: F
+              type: threshold
+              expression: E
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [50]
+                  operator:
+                    type: and
+                  reducer:
+                    type: last
+                  query:
+                    params: [E]

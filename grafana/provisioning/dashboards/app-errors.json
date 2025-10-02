@@ -1,0 +1,91 @@
+{
+  "id": null,
+  "uid": "app-errors",
+  "title": "Application & System Errors (Slim)",
+  "tags": ["logbox", "errors", "apps", "slim"],
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "svc",
+        "label": "Service",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values({job=\"app\"}, svc)",
+        "query": "label_values({job=\"app\"}, svc)",
+        "refresh": 1,
+        "current": { "text": "All", "value": ".*", "selected": false },
+        "includeAll": true,
+        "allValue": ".*"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Error Rate by Service (5m rate)",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 300,
+      "interval": "30s",
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (svc) (rate({job=\"app\", level=\"ERROR\", svc=~\"$svc\"}[5m]))",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "barchart",
+      "title": "Errors by Service (last 1h)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 200,
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (svc) (count_over_time({job=\"app\", level=\"ERROR\", svc=~\"$svc\"}[1h]))",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "options": { "legend": { "show": false } }
+    },
+    {
+      "type": "table",
+      "title": "Top Error Messages (last 1h)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 200,
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, count_over_time({job=\"app\", level=\"ERROR\", svc=~\"$svc\"}[1h]))",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "transformations": [{ "id": "labelsToFields", "options": { "mode": "columns" } }]
+    },
+    {
+      "type": "logs",
+      "title": "Recent Error Logs (raw)",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 300,
+      "targets": [
+        { "refId": "A", "expr": "{job=\"app\", level=\"ERROR\", svc=~\"$svc\"}", "queryType": "range" }
+      ],
+      "options": { "showLabels": true, "showTime": true }
+    }
+  ]
+}

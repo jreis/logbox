@@ -1,0 +1,75 @@
+networks:
+  logbox:
+    name: logbox-net
+
+volumes:
+  grafana_data:
+  loki_data:
+
+services:
+  loki:
+    container_name: logbox-loki
+    image: grafana/loki:2.9.8
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"           # publish to host too (helpful for curl tests)
+    restart: unless-stopped
+    networks: [logbox]
+
+  promtail:
+    container_name: logbox-promtail
+    image: grafana/promtail:2.9.8
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./dev-logs:/logs:ro
+    depends_on: [loki]
+    restart: unless-stopped
+    networks: [logbox]
+
+  grafana:
+    container_name: logbox-grafana
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_DEFAULT_THEME: light
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on: [loki]
+    restart: unless-stopped
+    networks: [logbox]
+
+  loggen-auth:
+    container_name: logbox-loggen-auth
+    image: alpine:3.20
+    command: >
+      sh -c 'i=0; while true; do
+        i=$$((i+1));
+        echo "Failed password for invalid user testuser from 203.0.113.$$((i%250+1)) port 22 ssh2";
+        sleep 1;
+      done'
+    restart: unless-stopped
+    networks: [logbox]
+
+  loggen-app:
+    container_name: logbox-loggen-app
+    image: alpine:3.20
+    command: >
+      sh -c 'mkdir -p /logs && touch /logs/app.log;
+             i=0; while true; do
+               i=$$((i+1));
+               printf "{\"level\":\"ERROR\",\"message\":\"Simulated failure #%s\",\"svc\":\"my-dotnet-api\",\"time\":\"%s\"}\n" "$$i" "$(date -Iseconds)" >> /logs/app.log;
+               sleep 0.5;
+             done'
+    volumes:
+      - ./dev-logs:/logs
+    restart: unless-stopped
+    networks: [logbox]

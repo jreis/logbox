@@ -1,0 +1,95 @@
+{
+  "id": null,
+  "uid": "auth-events",
+  "title": "Auth & Security Events (Slim)",
+  "tags": ["logbox", "security", "auth", "slim"],
+  "schemaVersion": 39,
+  "version": 2,
+  "refresh": "30s",
+  "editable": true,
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "type": "query",
+        "name": "job",
+        "label": "Job",
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values({job=~\"(syslog|docker|winlog)\"}, job)",
+        "query": "label_values({job=~\"(syslog|docker|winlog)\"}, job)",
+        "refresh": 1,
+        "current": { "text": "All", "value": "(syslog|docker|winlog)", "selected": false },
+        "includeAll": true,
+        "allValue": "(syslog|docker|winlog)"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Logins vs Failed Logins (5m rate)",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 300,
+      "interval": "30s",
+      "options": { "legend": { "displayMode": "table", "placement": "right" } },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (job) (rate(({job=~\"$job\"} |~ \"Accepted password|Accepted publickey|4624\")[5m]))",
+          "editorMode": "code",
+          "queryType": "range"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (job) (rate(({job=~\"$job\"} |~ \"Failed password|Invalid user|4625\")[5m]))",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Top Users with Failed Logins (last 1h)",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 200,
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, sum by (user) (count_over_time(({job=~\"$job\"} |~ \"Failed password\" | pattern \"<_> Failed password for <user> from <_> <_>\")[1h])))",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "transformations": [{ "id": "labelsToFields", "options": { "mode": "columns" } }]
+    },
+    {
+      "type": "table",
+      "title": "Top Source IPs with Failed Logins (last 1h)",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 200,
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "topk(10, sum by (ip) (count_over_time(({job=~\"$job\"} |~ \"Failed password\" | pattern \"<_> Failed password for <_> from <ip> <_>\")[1h])))",
+          "editorMode": "code",
+          "queryType": "range"
+        }
+      ],
+      "transformations": [{ "id": "labelsToFields", "options": { "mode": "columns" } }]
+    },
+    {
+      "type": "logs",
+      "title": "Recent Failed Login Events (raw)",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "maxDataPoints": 300,
+      "targets": [
+        { "refId": "A", "expr": "{job=~\"$job\"} |~ \"Failed password|Invalid user|4625\"", "queryType": "range" }
+      ],
+      "options": { "showLabels": true, "showTime": true }
+    }
+  ]
+}
